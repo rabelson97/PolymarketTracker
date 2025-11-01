@@ -21,7 +21,16 @@ def export_json(wallets, output_path: str = "output/qualifying_wallets.json"):
         {
             'address': w.address,
             'balance': w.balance,
-            'first_bet_timestamp': w.first_bet_timestamp.isoformat()
+            'first_bet': {
+                'amount': w.first_bet.amount,
+                'market_name': w.first_bet.market_name,
+                'market_slug': w.first_bet.market_slug,
+                'market_url': f"https://polymarket.com/event/{w.first_bet.market_slug}" if w.first_bet.market_slug else None,
+                'outcome': w.first_bet.outcome,
+                'timestamp': w.first_bet.timestamp.isoformat(),
+                'tx_hash': w.first_bet.tx_hash,
+                'polygonscan_url': f"https://polygonscan.com/tx/{w.first_bet.tx_hash}"
+            }
         }
         for w in wallets
     ]
@@ -43,13 +52,28 @@ def export_csv(wallets, output_path: str = "output/qualifying_wallets.csv"):
     
     with open(output_path, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['Address', 'Balance (USD)', 'First Bet Timestamp'])
+        writer.writerow([
+            'Address', 
+            'Balance (USD)', 
+            'First Bet Amount',
+            'Market Name',
+            'Outcome',
+            'Market URL',
+            'Timestamp',
+            'Transaction Hash'
+        ])
         
         for w in wallets:
+            market_url = f"https://polymarket.com/event/{w.first_bet.market_slug}" if w.first_bet.market_slug else ""
             writer.writerow([
                 w.address,
                 f"{w.balance:.2f}",
-                w.first_bet_timestamp.isoformat()
+                f"{w.first_bet.amount:.2f}",
+                w.first_bet.market_name,
+                w.first_bet.outcome,
+                market_url,
+                w.first_bet.timestamp.isoformat(),
+                w.first_bet.tx_hash
             ])
     
     print(f"✓ Exported to {output_path}")
@@ -85,7 +109,13 @@ def main():
         for i, wallet in enumerate(wallets, 1):
             print(f"\n{i}. Address: {wallet.address}")
             print(f"   Balance: ${wallet.balance:,.2f}")
-            print(f"   First Bet: {wallet.first_bet_timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"   First Bet: ${wallet.first_bet.amount:,.2f} on {wallet.first_bet.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"   Market: {wallet.first_bet.market_name}")
+            if wallet.first_bet.outcome != 'Unknown':
+                print(f"   Outcome: {wallet.first_bet.outcome}")
+            if wallet.first_bet.market_slug:
+                print(f"   Market URL: https://polymarket.com/event/{wallet.first_bet.market_slug}")
+            print(f"   Transaction: https://polygonscan.com/tx/{wallet.first_bet.tx_hash}")
         
         # Export results
         export_json(wallets)

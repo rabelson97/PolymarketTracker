@@ -2,7 +2,7 @@
 
 from typing import List, Dict, Set
 from datetime import datetime
-from .models import Wallet, Bet
+from .models import Wallet, Bet, BetDetails
 from .fetcher import PolymarketFetcher
 from .config import MIN_WALLET_BALANCE, MIN_BET_MARGIN
 
@@ -58,35 +58,34 @@ class WalletAnalyzer:
                 first_trade['price']
             )
             
-            # Debug: Show first few wallets
-            if checked_count < 3:
-                print(f"\nWallet {address[:10]}...")
-                print(f"  First trade amount: {first_trade['amount']:.2f}")
-                print(f"  Calculated margin: ${margin:.2f}")
-            
             # Check if margin meets threshold
             if margin < MIN_BET_MARGIN:
                 checked_count += 1
                 continue
             
             # Check wallet balance
-            if checked_count < 3:
-                print(f"  ✓ Margin qualifies, checking balance...")
-            
             balance = self.fetcher.get_wallet_balance(address)
-            
-            if checked_count < 3:
-                print(f"  Balance: ${balance:.2f}")
-            
             checked_count += 1
             
             if balance >= MIN_WALLET_BALANCE:
+                # Fetch market details for the first bet
+                print(f"✓ Qualifying wallet found: {address[:10]}... (${balance:,.2f}), fetching bet details...")
+                market_details = self.fetcher.get_market_details(first_trade.get('market_id', ''))
+                
+                bet_details = BetDetails(
+                    amount=first_trade['amount'],
+                    market_name=market_details.get('market_name'),
+                    market_slug=market_details.get('market_slug'),
+                    outcome=market_details.get('outcome'),
+                    timestamp=first_trade['timestamp'],
+                    tx_hash=first_trade['tx_hash']
+                )
+                
                 wallet = Wallet(
                     address=address,
                     balance=balance,
-                    first_bet_timestamp=first_trade['timestamp']
+                    first_bet=bet_details
                 )
                 qualifying_wallets.append(wallet)
-                print(f"✓ Qualifying wallet found: {address[:10]}... (${balance:,.2f})")
         
         return qualifying_wallets

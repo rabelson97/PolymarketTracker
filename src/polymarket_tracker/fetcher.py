@@ -141,6 +141,54 @@ class PolymarketFetcher:
         except Exception as e:
             return 0.0
     
+    def get_market_details(self, token_id: str) -> dict:
+        """Get market details from Polymarket Gamma API.
+        
+        Args:
+            token_id: The token ID from the transaction
+            
+        Returns:
+            Dictionary with market details
+        """
+        try:
+            # Query Polymarket's Gamma API for market info
+            url = f"https://gamma-api.polymarket.com/markets/{token_id}"
+            response = self.session.get(url, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    'market_name': data.get('question', 'Unknown Market'),
+                    'market_slug': data.get('slug', ''),
+                    'outcome': data.get('outcome', 'Unknown')
+                }
+            
+            # Try searching by condition ID
+            search_url = f"https://gamma-api.polymarket.com/markets?condition_id={token_id}"
+            response = self.session.get(search_url, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data and len(data) > 0:
+                    market = data[0]
+                    return {
+                        'market_name': market.get('question', 'Unknown Market'),
+                        'market_slug': market.get('slug', ''),
+                        'outcome': 'Unknown'
+                    }
+            
+            return {
+                'market_name': 'Unknown Market',
+                'market_slug': '',
+                'outcome': 'Unknown'
+            }
+        except Exception as e:
+            return {
+                'market_name': 'Unknown Market',
+                'market_slug': '',
+                'outcome': 'Unknown'
+            }
+    
     def calculate_margin(self, amount: float, price: float) -> float:
         """Calculate bet margin.
         
