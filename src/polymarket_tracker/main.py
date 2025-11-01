@@ -1,4 +1,4 @@
-"""Main entry point for Polymarket Tracker."""
+"""Main entry point for Polymarket Smart Money Tracker."""
 
 import json
 import csv
@@ -8,22 +8,23 @@ from .fetcher import PolymarketFetcher
 from .analyzer import WalletAnalyzer
 
 
-def export_json(wallets, output_path: str = "output/qualifying_wallets.json"):
-    """Export wallets to JSON format.
-    
-    Args:
-        wallets: List of Wallet objects
-        output_path: Output file path
-    """
+def export_json(wallets, output_path: str = "output/smart_money_signals.json"):
+    """Export wallets to JSON format with signal data."""
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     
     data = [
         {
             'address': w.address,
             'balance': w.balance,
+            'conviction_ratio': w.conviction_ratio,
+            'insider_score': w.insider_score,
+            'cluster_id': w.cluster_id,
+            'signal_quality': w.signal_quality,
             'first_bet': {
                 'amount': w.first_bet.amount,
                 'market_name': w.first_bet.market_name,
+                'market_category': w.first_bet.market_category,
+                'insider_risk': w.first_bet.insider_risk,
                 'market_slug': w.first_bet.market_slug,
                 'market_url': f"https://polymarket.com/event/{w.first_bet.market_slug}" if w.first_bet.market_slug else None,
                 'outcome': w.first_bet.outcome,
@@ -41,23 +42,23 @@ def export_json(wallets, output_path: str = "output/qualifying_wallets.json"):
     print(f"\n✓ Exported to {output_path}")
 
 
-def export_csv(wallets, output_path: str = "output/qualifying_wallets.csv"):
-    """Export wallets to CSV format.
-    
-    Args:
-        wallets: List of Wallet objects
-        output_path: Output file path
-    """
+def export_csv(wallets, output_path: str = "output/smart_money_signals.csv"):
+    """Export wallets to CSV format."""
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     
     with open(output_path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow([
+            'Signal Quality',
             'Address', 
-            'Balance (USD)', 
+            'Balance (USD)',
+            'Conviction %',
+            'Insider Score',
+            'Cluster ID',
             'First Bet Amount',
             'Market Name',
-            'Outcome',
+            'Market Category',
+            'Insider Risk',
             'Market URL',
             'Timestamp',
             'Transaction Hash'
@@ -66,11 +67,16 @@ def export_csv(wallets, output_path: str = "output/qualifying_wallets.csv"):
         for w in wallets:
             market_url = f"https://polymarket.com/event/{w.first_bet.market_slug}" if w.first_bet.market_slug else ""
             writer.writerow([
+                w.signal_quality,
                 w.address,
                 f"{w.balance:.2f}",
+                f"{w.conviction_ratio:.1%}",
+                f"{w.insider_score:.2f}",
+                w.cluster_id or "",
                 f"{w.first_bet.amount:.2f}",
                 w.first_bet.market_name,
-                w.first_bet.outcome,
+                w.first_bet.market_category or "",
+                w.first_bet.insider_risk,
                 market_url,
                 w.first_bet.timestamp.isoformat(),
                 w.first_bet.tx_hash
@@ -80,9 +86,10 @@ def export_csv(wallets, output_path: str = "output/qualifying_wallets.csv"):
 
 
 def main():
-    """Run the Polymarket Fresh Wallet Tracker."""
+    """Run the Polymarket Smart Money Tracker."""
     print("=" * 60)
-    print("Polymarket Fresh Wallet Tracker")
+    print("Polymarket Smart Money Tracker")
+    print("Conviction + Insider Detection System")
     print("=" * 60)
     print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     
@@ -101,27 +108,46 @@ def main():
     
     # Display results
     print("\n" + "=" * 60)
-    print(f"Found {len(wallets)} qualifying wallets")
+    print(f"Found {len(wallets)} smart money signals")
     print("=" * 60)
     
     if wallets:
-        print("\nQualifying Wallets:")
-        for i, wallet in enumerate(wallets, 1):
-            print(f"\n{i}. Address: {wallet.address}")
-            print(f"   Balance: ${wallet.balance:,.2f}")
-            print(f"   First Bet: ${wallet.first_bet.amount:,.2f} on {wallet.first_bet.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-            print(f"   Market: {wallet.first_bet.market_name}")
-            if wallet.first_bet.outcome != 'Unknown':
-                print(f"   Outcome: {wallet.first_bet.outcome}")
-            if wallet.first_bet.market_slug:
-                print(f"   Market URL: https://polymarket.com/event/{wallet.first_bet.market_slug}")
-            print(f"   Transaction: https://polygonscan.com/tx/{wallet.first_bet.tx_hash}")
+        # Group by signal quality
+        strong = [w for w in wallets if w.signal_quality == 'STRONG']
+        medium = [w for w in wallets if w.signal_quality == 'MEDIUM']
+        weak = [w for w in wallets if w.signal_quality == 'WEAK']
+        
+        if strong:
+            print(f"\n🔥 STRONG SIGNALS ({len(strong)}):")
+            for i, w in enumerate(strong, 1):
+                print(f"\n{i}. {w.address}")
+                print(f"   Balance: ${w.balance:,.0f} | Conviction: {w.conviction_ratio:.1%} | Insider Score: {w.insider_score:.2f}")
+                print(f"   Bet: ${w.first_bet.amount:,.0f} on {w.first_bet.timestamp.strftime('%Y-%m-%d %H:%M')}")
+                print(f"   Market: {w.first_bet.market_name}")
+                print(f"   Category: {w.first_bet.market_category} | Risk: {w.first_bet.insider_risk}")
+                if w.cluster_id:
+                    print(f"   ⚠️  Part of coordinated cluster: {w.cluster_id}")
+                if w.first_bet.market_slug:
+                    print(f"   🔗 https://polymarket.com/event/{w.first_bet.market_slug}")
+                print(f"   📊 https://polygonscan.com/tx/{w.first_bet.tx_hash}")
+        
+        if medium:
+            print(f"\n⚡ MEDIUM SIGNALS ({len(medium)}):")
+            for i, w in enumerate(medium, 1):
+                print(f"\n{i}. {w.address[:10]}... | ${w.balance:,.0f} | {w.conviction_ratio:.1%} conviction")
+                print(f"   ${w.first_bet.amount:,.0f} on {w.first_bet.market_name[:60]}...")
+                if w.cluster_id:
+                    print(f"   Cluster: {w.cluster_id}")
+        
+        if weak:
+            print(f"\n📊 WEAK SIGNALS ({len(weak)}): See CSV for details")
         
         # Export results
         export_json(wallets)
         export_csv(wallets)
     else:
-        print("\nNo qualifying wallets found in the lookback period.")
+        print("\nNo qualifying signals found in the lookback period.")
+        print("Try adjusting thresholds in config.py")
     
     print(f"\nCompleted at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 

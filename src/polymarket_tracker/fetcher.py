@@ -29,6 +29,7 @@ class PolymarketFetcher:
         
         self.base_url = "https://api.etherscan.io/v2/api"
         self.session = requests.Session()
+        self.market_cache = {}  # Cache market details
         print("Initialized with Etherscan API V2 (Polygon)")
     
     def _api_call(self, params: dict, retries: int = 2) -> dict:
@@ -54,56 +55,77 @@ class PolymarketFetcher:
         try:
             print("Fetching recent USDC transfers to Polymarket...")
             
-            params = {
-                'chainid': '137',
-                'module': 'account',
-                'action': 'tokentx',
-                'contractaddress': USDC_CONTRACT,
-                'address': POLYMARKET_CTF_EXCHANGE,
-                'page': '1',
-                'offset': '1000',  # Reduced from 2000
-                'sort': 'desc',
-                'apikey': self.api_key
-            }
-            
-            data = self._api_call(params)
-            
-            if data.get('status') != '1':
-                print(f"API Error: {data.get('message', 'Unknown error')}")
-                return []
-            
-            transactions = data.get('result', [])
-            print(f"Found {len(transactions)} recent USDC transfers")
-            
-            trades = []
+            all_trades = []
             cutoff_time = datetime.now() - timedelta(days=LOOKBACK_PERIOD)
             
-            for tx in transactions:
-                try:
-                    timestamp = int(tx.get('timeStamp', 0))
-                    tx_time = datetime.fromtimestamp(timestamp)
-                    
-                    if tx_time < cutoff_time:
-                        continue
-                    
-                    if tx.get('to', '').lower() == POLYMARKET_CTF_EXCHANGE.lower():
-                        wallet_address = tx.get('from', '').lower()
-                        value = float(tx.get('value', 0)) / 1e6
+            # Fetch multiple pages to get more transactions
+            for page in range(1, 3):  # Just 2 pages for speed (2000 transactions)
+                params = {
+                    'chainid': '137',
+                    'module': 'account',
+                    'action': 'tokentx',
+                    'contractaddress': USDC_CONTRACT,
+                    'address': POLYMARKET_CTF_EXCHANGE,
+                    'page': str(page),
+                    'offset': '1000',
+                    'sort': 'desc',
+                    'apikey': self.api_key
+                }
+                
+                print(f"  Fetching page {page}...")
+                data = self._api_call(params)
+                
+                if data.get('status') != '1':
+                    print(f"  API Error on page {page}: {data.get('message', 'Unknown error')}")
+                    break
+                
+                transactions = data.get('result', [])
+                if not transactions:
+                    print(f"  No more transactions on page {page}")
+                    break
+                
+                print(f"  Found {len(transactions)} transactions on page {page}")
+                
+                # Process transactions
+                page_trades = 0
+                for tx in transactions:
+                    try:
+                        timestamp = int(tx.get('timeStamp', 0))
+                        tx_time = datetime.fromtimestamp(timestamp)
                         
-                        if wallet_address and value > 0:
-                            trades.append({
-                                'wallet_address': wallet_address,
-                                'market_id': tx.get('hash'),
-                                'amount': value,
-                                'price': 1.0,
-                                'timestamp': tx_time,
-                                'tx_hash': tx.get('hash')
-                            })
-                except Exception:
-                    continue
+                        # Stop if we've gone past the cutoff
+                        if tx_time < cutoff_time:
+                            print(f"  Reached cutoff date, stopping pagination")
+                            break
+                        
+                        if tx.get('to', '').lower() == POLYMARKET_CTF_EXCHANGE.lower():
+                            wallet_address = tx.get('from', '').lower()
+                            value = float(tx.get('value', 0)) / 1e6
+                            
+                            if wallet_address and value > 0:
+                                all_trades.append({
+                                    'wallet_address': wallet_address,
+                                    'market_id': tx.get('hash'),
+                                    'amount': value,
+                                    'price': 1.0,
+                                    'timestamp': tx_time,
+                                    'tx_hash': tx.get('hash')
+                                })
+                                page_trades += 1
+                    except Exception:
+                        continue
+                
+                print(f"  Collected {page_trades} deposits from page {page}")
+                
+                # If we hit the cutoff date, stop fetching more pages
+                if tx_time < cutoff_time:
+                    break
+                
+                # Rate limiting between pages
+                time.sleep(0.5)
             
-            print(f"Collected {len(trades)} USDC deposits from last {LOOKBACK_PERIOD} days")
-            return trades
+            print(f"\nTotal: Collected {len(all_trades)} USDC deposits from last {LOOKBACK_PERIOD} days")
+            return all_trades
             
         except Exception as e:
             print(f"Error fetching trades: {e}")
@@ -142,52 +164,98 @@ class PolymarketFetcher:
             return 0.0
     
     def get_market_details(self, token_id: str) -> dict:
-        """Get market details from Polymarket Gamma API.
+        """Get market details - simplified for speed.
         
         Args:
             token_id: The token ID from the transaction
             
         Returns:
-            Dictionary with market details
+            Dictionary with market details including insider risk
         """
+        # Check cache first
+        if token_id in self.market_cache:
+            return self.market_cache[token_id]
+        
+        # For speed, just return basic info without API lookup
+        # Market name will be fetched only for qualifying wallets
+        result = {
+            'market_name': 'Unknown Market',
+            'market_slug': '',
+            'market_category': 'Unknown',
+            'insider_risk': 'LOW',
+            'outcome': 'Unknown'
+        }
+        
+        self.market_cache[token_id] = result
+        return result
+    
+    def get_market_details_full(self, token_id: str) -> dict:
+        """Get full market details with API lookup (slower).
+        
+        Only call this for qualifying wallets.
+        """
+        # Check cache first
+        if token_id in self.market_cache and self.market_cache[token_id]['market_name'] != 'Unknown Market':
+            return self.market_cache[token_id]
+        
         try:
-            # Query Polymarket's Gamma API for market info
-            url = f"https://gamma-api.polymarket.com/markets/{token_id}"
-            response = self.session.get(url, timeout=10)
+            # Try active markets first
+            search_url = f"https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=100"
+            response = self.session.get(search_url, timeout=5)
             
             if response.status_code == 200:
-                data = response.json()
-                return {
-                    'market_name': data.get('question', 'Unknown Market'),
-                    'market_slug': data.get('slug', ''),
-                    'outcome': data.get('outcome', 'Unknown')
-                }
+                markets = response.json()
+                for market in markets:
+                    if market.get('id') == token_id or market.get('condition_id') == token_id:
+                        market_name = market.get('question', 'Unknown Market')
+                        category = market.get('category', 'Unknown')
+                        insider_risk = self._assess_insider_risk(market_name, category)
+                        
+                        result = {
+                            'market_name': market_name,
+                            'market_slug': market.get('slug', ''),
+                            'market_category': category,
+                            'insider_risk': insider_risk,
+                            'outcome': 'Unknown'
+                        }
+                        self.market_cache[token_id] = result
+                        return result
+        except Exception:
+            pass
+        
+        result = {
+            'market_name': f'Market ID: {token_id[:16]}...',
+            'market_slug': '',
+            'market_category': 'Unknown',
+            'insider_risk': 'LOW',
+            'outcome': 'Unknown'
+        }
+        self.market_cache[token_id] = result
+        return result
+    
+    def _assess_insider_risk(self, market_name: str, category: str) -> str:
+        """Assess insider risk level based on market name and category.
+        
+        Args:
+            market_name: Market question text
+            category: Market category
             
-            # Try searching by condition ID
-            search_url = f"https://gamma-api.polymarket.com/markets?condition_id={token_id}"
-            response = self.session.get(search_url, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data and len(data) > 0:
-                    market = data[0]
-                    return {
-                        'market_name': market.get('question', 'Unknown Market'),
-                        'market_slug': market.get('slug', ''),
-                        'outcome': 'Unknown'
-                    }
-            
-            return {
-                'market_name': 'Unknown Market',
-                'market_slug': '',
-                'outcome': 'Unknown'
-            }
-        except Exception as e:
-            return {
-                'market_name': 'Unknown Market',
-                'market_slug': '',
-                'outcome': 'Unknown'
-            }
+        Returns:
+            Risk level: HIGH, MEDIUM, or LOW
+        """
+        from .config import INSIDER_RISK_KEYWORDS
+        
+        text = f"{market_name} {category}".lower()
+        
+        # Check for high-risk keywords
+        keyword_matches = sum(1 for keyword in INSIDER_RISK_KEYWORDS if keyword in text)
+        
+        if keyword_matches >= 2:
+            return 'HIGH'
+        elif keyword_matches == 1:
+            return 'MEDIUM'
+        else:
+            return 'LOW'
     
     def calculate_margin(self, amount: float, price: float) -> float:
         """Calculate bet margin.

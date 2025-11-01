@@ -11,6 +11,8 @@ class BetDetails:
     amount: float
     market_name: Optional[str]
     market_slug: Optional[str]
+    market_category: Optional[str]
+    insider_risk: str  # HIGH, MEDIUM, LOW
     outcome: Optional[str]
     timestamp: datetime
     tx_hash: str
@@ -18,10 +20,14 @@ class BetDetails:
 
 @dataclass
 class Wallet:
-    """Represents a Polymarket wallet."""
+    """Represents a Polymarket wallet with signal scoring."""
     address: str
     balance: float
     first_bet: BetDetails
+    conviction_ratio: float
+    insider_score: float
+    cluster_id: Optional[str]
+    signal_quality: str  # STRONG, MEDIUM, WEAK
 
 
 @dataclass
