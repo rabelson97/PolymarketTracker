@@ -207,3 +207,6 @@ marimo/_lsp/
 __marimo__/
 .codemachine/memory/
 node_modules/
+
+# Project-specific
+output/
