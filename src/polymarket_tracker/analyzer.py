@@ -43,6 +43,7 @@ class WalletAnalyzer:
                 wallet_trades[addr].append(trade)
         
         qualifying_wallets = []
+        checked_count = 0
         
         print(f"Analyzing {len(wallet_trades)} unique wallets...")
         
@@ -57,13 +58,27 @@ class WalletAnalyzer:
                 first_trade['price']
             )
             
+            # Debug: Show first few wallets
+            if checked_count < 3:
+                print(f"\nWallet {address[:10]}...")
+                print(f"  First trade amount: {first_trade['amount']:.2f}")
+                print(f"  Calculated margin: ${margin:.2f}")
+            
             # Check if margin meets threshold
             if margin < MIN_BET_MARGIN:
+                checked_count += 1
                 continue
             
             # Check wallet balance
-            print(f"Checking balance for {address[:10]}...")
+            if checked_count < 3:
+                print(f"  ✓ Margin qualifies, checking balance...")
+            
             balance = self.fetcher.get_wallet_balance(address)
+            
+            if checked_count < 3:
+                print(f"  Balance: ${balance:.2f}")
+            
+            checked_count += 1
             
             if balance >= MIN_WALLET_BALANCE:
                 wallet = Wallet(

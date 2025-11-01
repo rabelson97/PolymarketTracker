@@ -1,76 +1,144 @@
 """Polymarket API data fetcher."""
 
+import os
+import requests
+import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
-from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import ApiCreds
+from dotenv import load_dotenv
 from .models import Bet
 from .config import LOOKBACK_PERIOD
 
+load_dotenv()
+
+# Polymarket CTF Exchange contract on Polygon
+POLYMARKET_CTF_EXCHANGE = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E"
+# USDC contract on Polygon
+USDC_CONTRACT = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+
 
 class PolymarketFetcher:
-    """Fetches data from Polymarket API."""
+    """Fetches data from Polymarket via Etherscan API V2."""
     
-    def __init__(self, host: str = "https://clob.polymarket.com"):
-        """Initialize the Polymarket fetcher.
+    def __init__(self):
+        """Initialize the Polymarket fetcher with Etherscan API V2."""
+        self.api_key = os.getenv("ETHERSCAN_API_KEY")
         
-        Args:
-            host: Polymarket CLOB API host URL
-        """
-        self.client = ClobClient(host, key="", chain_id=137)
+        if not self.api_key:
+            raise ValueError("Missing ETHERSCAN_API_KEY environment variable")
+        
+        self.base_url = "https://api.etherscan.io/v2/api"
+        self.session = requests.Session()
+        print("Initialized with Etherscan API V2 (Polygon)")
+    
+    def _api_call(self, params: dict, retries: int = 2) -> dict:
+        """Make API call with retry logic."""
+        for attempt in range(retries):
+            try:
+                response = self.session.get(self.base_url, params=params, timeout=45)
+                return response.json()
+            except requests.exceptions.Timeout:
+                if attempt < retries - 1:
+                    print(f"Timeout, retrying...")
+                    time.sleep(3)
+                else:
+                    raise
+        return {}
     
     def fetch_recent_trades(self) -> List[Dict[str, Any]]:
-        """Fetch recent trades from Polymarket.
+        """Fetch recent trades from Polymarket via blockchain data.
         
         Returns:
             List of trade dictionaries
         """
         try:
-            # Get markets to find recent trades
-            markets = self.client.get_markets()
+            print("Fetching recent USDC transfers to Polymarket...")
+            
+            params = {
+                'chainid': '137',
+                'module': 'account',
+                'action': 'tokentx',
+                'contractaddress': USDC_CONTRACT,
+                'address': POLYMARKET_CTF_EXCHANGE,
+                'page': '1',
+                'offset': '1000',  # Reduced from 2000
+                'sort': 'desc',
+                'apikey': self.api_key
+            }
+            
+            data = self._api_call(params)
+            
+            if data.get('status') != '1':
+                print(f"API Error: {data.get('message', 'Unknown error')}")
+                return []
+            
+            transactions = data.get('result', [])
+            print(f"Found {len(transactions)} recent USDC transfers")
             
             trades = []
             cutoff_time = datetime.now() - timedelta(days=LOOKBACK_PERIOD)
             
-            for market in markets[:50]:  # Limit to avoid rate limits
+            for tx in transactions:
                 try:
-                    market_trades = self.client.get_trades(market['condition_id'])
-                    for trade in market_trades:
-                        trade_time = datetime.fromtimestamp(int(trade.get('timestamp', 0)))
-                        if trade_time >= cutoff_time:
+                    timestamp = int(tx.get('timeStamp', 0))
+                    tx_time = datetime.fromtimestamp(timestamp)
+                    
+                    if tx_time < cutoff_time:
+                        continue
+                    
+                    if tx.get('to', '').lower() == POLYMARKET_CTF_EXCHANGE.lower():
+                        wallet_address = tx.get('from', '').lower()
+                        value = float(tx.get('value', 0)) / 1e6
+                        
+                        if wallet_address and value > 0:
                             trades.append({
-                                'wallet_address': trade.get('maker_address') or trade.get('taker_address'),
-                                'market_id': market['condition_id'],
-                                'amount': float(trade.get('size', 0)),
-                                'price': float(trade.get('price', 0)),
-                                'timestamp': trade_time
+                                'wallet_address': wallet_address,
+                                'market_id': tx.get('hash'),
+                                'amount': value,
+                                'price': 1.0,
+                                'timestamp': tx_time,
+                                'tx_hash': tx.get('hash')
                             })
-                except Exception as e:
-                    print(f"Error fetching trades for market {market.get('condition_id')}: {e}")
+                except Exception:
                     continue
             
+            print(f"Collected {len(trades)} USDC deposits from last {LOOKBACK_PERIOD} days")
             return trades
+            
         except Exception as e:
-            print(f"Error fetching markets: {e}")
+            print(f"Error fetching trades: {e}")
             return []
     
     def get_wallet_balance(self, address: str) -> float:
-        """Get wallet balance from Polymarket.
+        """Get wallet USDC balance from Etherscan API.
         
         Args:
             address: Wallet address
             
         Returns:
-            Wallet balance in USD
+            Wallet USDC balance in USD
         """
         try:
-            # Get wallet's open orders and positions
-            orders = self.client.get_orders(address)
-            total = sum(float(order.get('size', 0)) * float(order.get('price', 0)) 
-                       for order in orders)
-            return total
+            params = {
+                'chainid': '137',
+                'module': 'account',
+                'action': 'tokenbalance',
+                'contractaddress': USDC_CONTRACT,
+                'address': address,
+                'tag': 'latest',
+                'apikey': self.api_key
+            }
+            
+            time.sleep(0.2)  # Rate limiting
+            data = self._api_call(params)
+            
+            if data.get('status') == '1':
+                balance_raw = int(data.get('result', 0))
+                balance_usd = balance_raw / 1e6
+                return balance_usd
+            
+            return 0.0
         except Exception as e:
-            print(f"Error fetching balance for {address}: {e}")
             return 0.0
     
     def calculate_margin(self, amount: float, price: float) -> float:
@@ -83,5 +151,4 @@ class PolymarketFetcher:
         Returns:
             Margin (potential loss)
         """
-        # Margin = amount at risk = bet size * price
         return amount * price

@@ -63,7 +63,13 @@ def main():
     print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     
     # Initialize components
-    fetcher = PolymarketFetcher()
+    try:
+        fetcher = PolymarketFetcher()
+    except ValueError as e:
+        print(f"[ERROR] {e}")
+        print("\nPlease set ETHERSCAN_API_KEY environment variable")
+        return
+    
     analyzer = WalletAnalyzer(fetcher)
     
     # Find qualifying wallets
