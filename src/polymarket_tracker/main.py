@@ -15,6 +15,7 @@ def export_json(wallets, output_path: str = "output/smart_money_signals.json"):
     data = [
         {
             'address': w.address,
+            'polymarket_profile': f"https://polymarket.com/profile/{w.address}",
             'balance': w.balance,
             'conviction_ratio': w.conviction_ratio,
             'insider_score': w.insider_score,
@@ -50,7 +51,8 @@ def export_csv(wallets, output_path: str = "output/smart_money_signals.csv"):
         writer = csv.writer(f)
         writer.writerow([
             'Signal Quality',
-            'Address', 
+            'Address',
+            'Polymarket Profile',
             'Balance (USD)',
             'Conviction %',
             'Insider Score',
@@ -69,6 +71,7 @@ def export_csv(wallets, output_path: str = "output/smart_money_signals.csv"):
             writer.writerow([
                 w.signal_quality,
                 w.address,
+                f"https://polymarket.com/profile/{w.address}",
                 f"{w.balance:.2f}",
                 f"{w.conviction_ratio:.1%}",
                 f"{w.insider_score:.2f}",
@@ -135,9 +138,12 @@ def main():
             print(f"\n⚡ MEDIUM SIGNALS ({len(medium)}):")
             for i, w in enumerate(medium, 1):
                 print(f"\n{i}. {w.address[:10]}... | ${w.balance:,.0f} | {w.conviction_ratio:.1%} conviction")
-                print(f"   ${w.first_bet.amount:,.0f} on {w.first_bet.market_name[:60]}...")
+                print(f"   Bet: ${w.first_bet.amount:,.0f}")
+                print(f"   📊 VIEW WHAT THEY BET ON: https://polygonscan.com/tx/{w.first_bet.tx_hash}")
+                print(f"   👤 VIEW THEIR POLYMARKET PROFILE: https://polymarket.com/profile/{w.address}")
+                print(f"      (See all their active positions and betting history)")
                 if w.cluster_id:
-                    print(f"   Cluster: {w.cluster_id}")
+                    print(f"   ⚠️  Cluster: {w.cluster_id} (coordinated activity)")
         
         if weak:
             print(f"\n📊 WEAK SIGNALS ({len(weak)}): See CSV for details")
@@ -145,6 +151,17 @@ def main():
         # Export results
         export_json(wallets)
         export_csv(wallets)
+        
+        print("\n" + "=" * 60)
+        print("HOW TO SEE WHAT THEY BET ON:")
+        print("=" * 60)
+        print("1. Click the Polymarket profile link above")
+        print("2. You'll see ALL their active positions")
+        print("3. Look for recent bets (check timestamps)")
+        print("4. Copy their highest conviction plays")
+        print("\nEASIEST METHOD:")
+        print("  https://polymarket.com/profile/[WALLET_ADDRESS]")
+        print("  Shows all their bets in one place!")
     else:
         print("\nNo qualifying signals found in the lookback period.")
         print("Try adjusting thresholds in config.py")

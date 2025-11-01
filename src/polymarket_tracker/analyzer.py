@@ -206,6 +206,10 @@ class WalletAnalyzer:
                 qualifies = True
             
             if qualifies:
+                # Fetch FULL market details for qualifying wallets
+                print(f"   Fetching market details...")
+                market_details = self.fetcher.get_market_details_full(first_trade.get('market_id', ''))
+                
                 bet_details = BetDetails(
                     amount=first_trade['amount'],
                     market_name=market_details.get('market_name'),

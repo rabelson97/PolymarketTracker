@@ -1,16 +1,64 @@
 # PolymarketTracker
 
-Track fresh wallets on Polymarket with balance ≥ $50k that placed their first bet with ≥ $5k margin.
+Track smart money on Polymarket using **conviction-based detection** and **insider cluster analysis**.
+
+## What This Does
+
+Finds wallets that:
+- Bet >10% of their balance (high conviction)
+- Are part of coordinated clusters (3+ wallets on same market)
+- Bet on high insider-risk markets (airdrops, government, awards)
+
+## Quick Start
+
+```bash
+# Run the tracker
+python -m src.polymarket_tracker.main
+
+# Check results
+cat output/smart_money_signals.json
+open output/smart_money_signals.csv
+```
+
+## 📖 Documentation
+
+- **[HOW_TO_COPY_BETS.md](HOW_TO_COPY_BETS.md)** - Step-by-step guide to copying smart money bets
+- **[SMART_MONEY_GUIDE.md](SMART_MONEY_GUIDE.md)** - Complete system documentation
+- **[spec/SPEC.md](spec/SPEC.md)** - Original specification
+
+## Example Output
+
+```
+⚡ MEDIUM SIGNALS (1):
+
+1. 0xfdd92e53... | $1,228 | 63.5% conviction
+   Bet: $780
+   📊 VIEW WHAT THEY BET ON: https://polygonscan.com/tx/0xe433259b...
+   ⚠️  Cluster: cluster_12 (coordinated activity)
+```
+
+**What this means:**
+- Wallet has $1,228 balance
+- Bet $780 (63.5% of their balance!) 
+- Part of a coordinated cluster
+- **Action**: Strong signal - investigate this bet
+
+## Signal Quality Levels
+
+- 🔥 **STRONG**: High conviction + High insider-risk market
+- ⚡ **MEDIUM**: High conviction OR insider cluster
+- 📊 **WEAK**: Legacy signals (large balance + large bet)
 
 ## Overview
 
-This project identifies new high-value participants on Polymarket who:
-- Have a wallet balance of $50,000 or more (USDC)
-- Placed their first bet with a margin of $5,000 or more
+This project identifies smart money on Polymarket using:
+- **Conviction ratio** - Bet size relative to wallet balance
+- **Insider detection** - Coordinated wallet clusters
+- **Market risk assessment** - Airdrops, government, awards have higher insider risk
 
 ## Specification
 
-See [`spec/SPEC.md`](spec/SPEC.md) for the complete specification.
+See [`spec/SPEC.md`](spec/SPEC.md) for the original specification.
 
 ## Development
 
