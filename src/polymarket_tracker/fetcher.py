@@ -59,7 +59,7 @@ class PolymarketFetcher:
             cutoff_time = datetime.now() - timedelta(days=LOOKBACK_PERIOD)
             
             # Fetch multiple pages to get more transactions
-            for page in range(1, 3):  # Just 2 pages for speed (2000 transactions)
+            for page in range(1, 6):  # 5 pages = 5000 transactions
                 params = {
                     'chainid': '137',
                     'module': 'account',
@@ -122,7 +122,7 @@ class PolymarketFetcher:
                     break
                 
                 # Rate limiting between pages
-                time.sleep(0.5)
+                time.sleep(0.3)
             
             print(f"\nTotal: Collected {len(all_trades)} USDC deposits from last {LOOKBACK_PERIOD} days")
             return all_trades
@@ -151,7 +151,7 @@ class PolymarketFetcher:
                 'apikey': self.api_key
             }
             
-            time.sleep(0.2)  # Rate limiting
+            time.sleep(0.1)  # Rate limiting (reduced for speed)
             data = self._api_call(params)
             
             if data.get('status') == '1':

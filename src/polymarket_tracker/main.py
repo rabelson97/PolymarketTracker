@@ -1,7 +1,6 @@
 """Main entry point for Polymarket Smart Money Tracker."""
 
 import json
-import csv
 from datetime import datetime
 from pathlib import Path
 from .fetcher import PolymarketFetcher
@@ -41,51 +40,6 @@ def export_json(wallets, output_path: str = "output/smart_money_signals.json"):
         json.dump(data, f, indent=2)
     
     print(f"\n✓ Exported to {output_path}")
-
-
-def export_csv(wallets, output_path: str = "output/smart_money_signals.csv"):
-    """Export wallets to CSV format."""
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(output_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            'Signal Quality',
-            'Address',
-            'Polymarket Profile',
-            'Balance (USD)',
-            'Conviction %',
-            'Insider Score',
-            'Cluster ID',
-            'First Bet Amount',
-            'Market Name',
-            'Market Category',
-            'Insider Risk',
-            'Market URL',
-            'Timestamp',
-            'Transaction Hash'
-        ])
-        
-        for w in wallets:
-            market_url = f"https://polymarket.com/event/{w.first_bet.market_slug}" if w.first_bet.market_slug else ""
-            writer.writerow([
-                w.signal_quality,
-                w.address,
-                f"https://polymarket.com/profile/{w.address}",
-                f"{w.balance:.2f}",
-                f"{w.conviction_ratio:.1%}",
-                f"{w.insider_score:.2f}",
-                w.cluster_id or "",
-                f"{w.first_bet.amount:.2f}",
-                w.first_bet.market_name,
-                w.first_bet.market_category or "",
-                w.first_bet.insider_risk,
-                market_url,
-                w.first_bet.timestamp.isoformat(),
-                w.first_bet.tx_hash
-            ])
-    
-    print(f"✓ Exported to {output_path}")
 
 
 def main():
@@ -150,7 +104,6 @@ def main():
         
         # Export results
         export_json(wallets)
-        export_csv(wallets)
         
         print("\n" + "=" * 60)
         print("HOW TO SEE WHAT THEY BET ON:")
