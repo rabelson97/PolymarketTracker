@@ -62,27 +62,17 @@ See [`spec/SPEC.md`](spec/SPEC.md) for the original specification.
 
 ## Development
 
-This project follows **Spec-Driven Development (SDD)** using [GitHub Spec Kit](https://github.com/github/spec-kit).
-
-### Getting Started
-
-1. Read the specification: `spec/SPEC.md`
-2. Use Amazon Q Developer: `/implement-spec`
-3. Follow the spec exactly
-
 ### Project Structure
 
 ```
 spec/
-  SPEC.md              # Main specification
-.amazonq/prompts/      # Amazon Q Developer prompts
-memory/                # Project memory and context
-templates/             # Spec-kit templates
-scripts/               # Utility scripts
+  SPEC.md              # Original product specification
 src/
   polymarket_tracker/  # Main application code
 output/                # Generated reports (gitignored)
 ```
+
+Additional guides such as `SMART_MONEY_GUIDE.md` live at the repository root.
 
 ## Installation
 
